@@ -581,18 +581,17 @@ TEST_CASE("Test Dispatcher Thread", "[dispatcher][thread]")
     using TestDispatcher = Dispatcher<>;
     TestDispatcher dispatcher;
     const uint32_t numThreads = 64;
-    atomic<uint32_t> invokedCount = 0;
-    atomic<uint32_t> registeredCount = 0;
+    atomic<uint32_t> invokedCount = { 0 };
+    atomic<uint32_t> registeredCount = { 0 };
 
     vector<thread> threads;
     for (uint32_t i = 0; i < numThreads; ++i)
     {
         threads.emplace_back([&dispatcher,
-                              &numThreads,
                               &invokedCount,
                               &registeredCount]()
         {
-            atomic_bool invoked = false;
+            atomic_bool invoked = { false };
             TestDispatcher::Listener listener = dispatcher.Register([&invoked,
                                                                      &invokedCount]()
             {
