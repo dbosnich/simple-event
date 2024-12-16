@@ -27,8 +27,9 @@ namespace Event
 //--------------------------------------------------------------
 enum class Status
 {
-    Continue = 0,   //!< Keep dispatching the event.
-    Consumed = 1    //!< Stop dispatching the event.
+    Continue = 0, //!< Listener invoked, keep dispatching event.
+    Consumed = 1, //!< Listener invoked, stop dispatching event.
+    Filtered = 2 //!< Listener filtered, keep dispatching event.
 };
 
 //--------------------------------------------------------------
@@ -41,37 +42,49 @@ template<class... Args>
 class Dispatcher
 {
 public:
-    using Function = std::function<Status(Args...)>;
-    using Listener = std::shared_ptr<Function>;
+    using Callable = std::function<Status(Args...)>;
+    using Listener = std::shared_ptr<Callable>;
 
     [[nodiscard]]
-    Listener Register(Function a_function,
+    Listener Register(Callable a_callable,
                       int32_t a_sortIndex = 0);
 
     void Dispatch(Args... a_args);
 
+    class Filter
+    {
+    public:
+        using Function = std::function<bool(Args...)>;
+        Filter(Function a_function, Callable a_callable);
+        Status operator()(Args...) const;
+
+    private:
+        Function m_function;
+        Callable m_callable;
+    };
+
 private:
-    std::multimap<int32_t, std::weak_ptr<Function>> m_listeners;
+    std::multimap<int32_t, std::weak_ptr<Callable>> m_listeners;
     std::mutex m_listenersMutex;
 };
 
 //--------------------------------------------------------------
-//! Registers a function to invoke when each event is dispatched.
+//! Registers a callable to invoke when each event is dispatched.
 //!
-//! \param[in] a_function A function object that will be invoked.
-//! \param[in] a_sortIndex Order in which to invoke the function.
-//! \return Listener to retain while function should be invoked.
-//!         Release all references to 'deregister' the function.
+//! \param[in] a_callable A callable object that will be invoked.
+//! \param[in] a_sortIndex Order in which to invoke the callable.
+//! \return Listener to retain while callable should be invoked.
+//!         Release all references to 'deregister' the callable.
 //--------------------------------------------------------------
 template<class... Args>
 inline typename Dispatcher<Args...>::Listener
-Dispatcher<Args...>::Register(Function a_function,
+Dispatcher<Args...>::Register(Callable a_callable,
                               int32_t a_sortIndex)
 {
     std::lock_guard<std::mutex> lock(m_listenersMutex);
 
     // Create the listener then store it in a sorted container.
-    Listener listener = std::make_shared<Function>(a_function);
+    Listener listener = std::make_shared<Callable>(a_callable);
     m_listeners.emplace(std::make_pair(a_sortIndex, listener));
 
     return listener;
@@ -114,9 +127,9 @@ inline void Dispatcher<Args...>::Dispatch(Args... a_args)
     // Send the event to each listener.
     for (Listener listener : listeners)
     {
-        if (Function func = *listener)
+        if (Callable callable = *listener)
         {
-            Status status = func(a_args...);
+            Status status = callable(a_args...);
             if (status == Status::Consumed)
             {
                 // Stop sending the event.
@@ -124,6 +137,34 @@ inline void Dispatcher<Args...>::Dispatch(Args... a_args)
             }
         }
     }
+}
+
+//--------------------------------------------------------------
+//! Filter objects are essentially event listeners that are only
+//! invoked if a filter function with the same args returns true.
+//!
+//! \param[in] a_function Function to filter all incoming events.
+//! \param[in] a_callable Callable to be invoked unless filtered.
+//--------------------------------------------------------------
+template<class... Args>
+inline Dispatcher<Args...>::Filter::Filter(Function a_function,
+                                           Callable a_callable)
+    : m_function(a_function)
+    , m_callable(a_callable)
+{
+}
+
+//--------------------------------------------------------------
+//! Function call operator which allows the filter object to be
+//! registered directly with an event dispatcher as a callable.
+//!
+//! \param[in] a_args Arguments forwarded to filter and callable.
+//--------------------------------------------------------------
+template<class... Args>
+inline Status Dispatcher<Args...>::Filter::operator()(Args... a_args) const
+{
+    return (m_callable && m_function && m_function(a_args...)) ?
+            m_callable(a_args...) : Status::Filtered;
 }
 
 } // namespace Event

@@ -143,6 +143,54 @@ public:
         REQUIRE(a_bool == s_expectedBool);
         return Status::Continue;
     }
+
+    //----------------------------------------------------------
+    Status operator()() const
+    {
+        REQUIRE(true);
+        return Status::Continue;
+    }
+
+    //----------------------------------------------------------
+    Status operator()(bool a_bool) const
+    {
+        REQUIRE(a_bool == s_expectedBool);
+        return Status::Continue;
+    }
+
+    //----------------------------------------------------------
+    Status operator()(float a_float) const
+    {
+        REQUIRE(a_float == s_expectedFloat);
+        return Status::Continue;
+    }
+
+    //----------------------------------------------------------
+    Status operator()(string a_string) const
+    {
+        REQUIRE(a_string == s_expectedString);
+        return Status::Continue;
+    }
+
+    //----------------------------------------------------------
+    Status operator()(TestStruct a_struct) const
+    {
+        REQUIRE(a_struct == s_expectedStruct);
+        return Status::Continue;
+    }
+
+    //----------------------------------------------------------
+    Status operator()(TestStruct a_struct,
+                      string a_string,
+                      float a_float,
+                      bool a_bool) const
+    {
+        REQUIRE(a_struct == s_expectedStruct);
+        REQUIRE(a_string == s_expectedString);
+        REQUIRE(a_float == s_expectedFloat);
+        REQUIRE(a_bool == s_expectedBool);
+        return Status::Continue;
+    }
 };
 
 //--------------------------------------------------------------
@@ -240,6 +288,8 @@ TEST_CASE("Test Dispatcher void", "[dispatcher][void]")
     using TestDispatcher = Dispatcher<>;
     TestDispatcher dispatcher;
     TestClass testClass;
+
+    TestDispatcher::Listener listener0 = dispatcher.Register(testClass);
     TestDispatcher::Listener listener1 = dispatcher.Register(TestFreeFunctionVoidArg);
     TestDispatcher::Listener listener2 = dispatcher.Register(bind(&TestClass::TestClassFunctionVoidArg, &testClass));
     TestDispatcher::Listener listener3 = dispatcher.Register(bind(&TestClass::TestClassFunctionVoidArgConst, &testClass));
@@ -263,6 +313,8 @@ TEST_CASE("Test Dispatcher bool", "[dispatcher][bool]")
     using TestDispatcher = Dispatcher<bool>;
     TestDispatcher dispatcher;
     TestClass testClass;
+
+    TestDispatcher::Listener listener0 = dispatcher.Register(testClass);
     TestDispatcher::Listener listener1 = dispatcher.Register(TestFreeFunctionBoolArg);
     TestDispatcher::Listener listener2 = dispatcher.Register(TestFreeFunctionBoolRefArg);
     TestDispatcher::Listener listener3 = dispatcher.Register(bind(&TestClass::TestClassFunctionBoolArg, &testClass, placeholders::_1));
@@ -292,6 +344,8 @@ TEST_CASE("Test Dispatcher float", "[dispatcher][float]")
     using TestDispatcher = Dispatcher<float>;
     TestDispatcher dispatcher;
     TestClass testClass;
+
+    TestDispatcher::Listener listener0 = dispatcher.Register(testClass);
     TestDispatcher::Listener listener1 = dispatcher.Register(TestFreeFunctionFloatArg);
     TestDispatcher::Listener listener2 = dispatcher.Register(TestFreeFunctionFloatRefArg);
     TestDispatcher::Listener listener3 = dispatcher.Register(bind(&TestClass::TestClassFunctionFloatArg, &testClass, placeholders::_1));
@@ -326,6 +380,7 @@ TEST_CASE("Test Dispatcher string", "[dispatcher][string]")
     TestDispatcher dispatcher;
     TestClass testClass;
 
+    TestDispatcher::Listener listener0 = dispatcher.Register(testClass);
     TestDispatcher::Listener listener1 = dispatcher.Register(TestFreeFunctionStringArg);
     TestDispatcher::Listener listener2 = dispatcher.Register(TestFreeFunctionStringRefArg);
     TestDispatcher::Listener listener3 = dispatcher.Register(bind(&TestClass::TestClassFunctionStringArg, &testClass, placeholders::_1));
@@ -358,6 +413,8 @@ TEST_CASE("Test Dispatcher struct", "[dispatcher][struct]")
     using TestDispatcher = Dispatcher<TestStruct>;
     TestDispatcher dispatcher;
     TestClass testClass;
+
+    TestDispatcher::Listener listener0 = dispatcher.Register(testClass);
     TestDispatcher::Listener listener1 = dispatcher.Register(TestFreeFunctionStructArg);
     TestDispatcher::Listener listener2 = dispatcher.Register(TestFreeFunctionStructRefArg);
     TestDispatcher::Listener listener3 = dispatcher.Register(bind(&TestClass::TestClassFunctionStructArg, &testClass, placeholders::_1));
@@ -393,6 +450,8 @@ TEST_CASE("Test Dispatcher multi", "[dispatcher][multi]")
     using TestDispatcher = Dispatcher<TestStruct, string, float, bool>;
     TestDispatcher dispatcher;
     TestClass testClass;
+
+    TestDispatcher::Listener listener0 = dispatcher.Register(testClass);
     TestDispatcher::Listener listener1 = dispatcher.Register(TestFreeFunctionMultiArg);
     TestDispatcher::Listener listener2 = dispatcher.Register(TestFreeFunctionMultiRefArg);
     TestDispatcher::Listener listener3 = dispatcher.Register(bind(&TestClass::TestClassFunctionMultiArg, &testClass, placeholders::_1, placeholders::_2, placeholders::_3, placeholders::_4));
@@ -622,6 +681,46 @@ TEST_CASE("Test Dispatcher Thread", "[dispatcher][thread]")
     // Check that all listeners deregistered.
     dispatcher.Dispatch();
     REQUIRE(invokedCount == numThreads);
+}
+
+//--------------------------------------------------------------
+bool TestFilterFunction(float a_float)
+{
+    // printf("TestListener function called with %f\n", a_float);
+    (void)a_float;
+
+    // Filter the event if passed a negative number.
+    return a_float >= 0.0f ? true : false;
+}
+
+//--------------------------------------------------------------
+TEST_CASE("Test Dispatcher Filter", "[dispatcher][filter]")
+{
+    using TestDispatcher = Dispatcher<float>;
+    using TestFilter = TestDispatcher::Filter;
+
+    TestFilter filter(TestFilterFunction, [](float a_float)
+    {
+        REQUIRE(a_float == s_expectedFloat);
+        REQUIRE(a_float >= 0.0f);
+        return Status::Continue;
+    });
+
+    TestDispatcher dispatcher;
+    TestDispatcher::Listener listener1 = dispatcher.Register(filter);
+
+    s_expectedFloat = 0.0f;
+    dispatcher.Dispatch(0.0f); // Not negative, should be invoked.
+
+    s_expectedFloat = 9.0f;
+    dispatcher.Dispatch(9.0f); // Not negative, should be invoked.
+
+    dispatcher.Dispatch(-1.f); // Negative, should not be invoked.
+
+    s_expectedFloat = 3.14f;
+    dispatcher.Dispatch(3.14f);// Not negative, should be invoked.
+
+    dispatcher.Dispatch(-9.f); // Negative, should not be invoked.
 }
 
 //--------------------------------------------------------------
