@@ -545,6 +545,30 @@ TEST_CASE("Test Dispatcher Release", "[dispatcher][release]")
 }
 
 //--------------------------------------------------------------
+TEST_CASE("Test Dispatcher Remove", "[dispatcher][remove]")
+{
+    using TestDispatcher = Dispatcher<>;
+    TestDispatcher dispatcher;
+    bool shouldBeInvoked = true;
+    TestDispatcher::Listener listener1 = dispatcher.Register(TestFreeFunctionVoidArg);
+    TestDispatcher::Listener listener2 = dispatcher.Register([&shouldBeInvoked]()
+    {
+        REQUIRE(shouldBeInvoked);
+        return Status::Continue;
+    });
+    TestDispatcher::Listener listener3 = dispatcher.Register([]()
+    {
+        REQUIRE(true);
+        return Status::Continue;
+    });
+
+    dispatcher.Dispatch();
+    dispatcher.Remove(listener2);
+    shouldBeInvoked = false;
+    dispatcher.Dispatch();
+}
+
+//--------------------------------------------------------------
 TEST_CASE("Test Dispatcher Recursive", "[dispatcher][recursive]")
 {
     using TestDispatcher = Dispatcher<>;

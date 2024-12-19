@@ -46,8 +46,9 @@ public:
     using Listener = std::shared_ptr<Callable>;
 
     [[nodiscard]]
-    Listener Register(Callable a_callable,
-                      int32_t a_sortIndex = 0);
+    Listener Register(const Callable& a_callable,
+                      const int32_t& a_sortIndex = 0);
+    bool Remove(const Listener& a_listener);
 
     void Dispatch(Args... a_args);
 
@@ -55,7 +56,8 @@ public:
     {
     public:
         using Function = std::function<bool(Args...)>;
-        Filter(Function a_function, Callable a_callable);
+        Filter(const Function& a_function,
+               const Callable& a_callable);
         Status operator()(Args...) const;
 
     private:
@@ -76,18 +78,41 @@ private:
 //! \return Listener to retain while callable should be invoked.
 //!         Release all references to 'deregister' the callable.
 //--------------------------------------------------------------
-template<class... Args>
-inline typename Dispatcher<Args...>::Listener
-Dispatcher<Args...>::Register(Callable a_callable,
-                              int32_t a_sortIndex)
+template<class... Args> inline
+typename Dispatcher<Args...>::Listener
+Dispatcher<Args...>::Register(const Callable& a_callable,
+                              const int32_t& a_sortIndex)
 {
-    std::lock_guard<std::mutex> lock(m_listenersMutex);
-
     // Create the listener then store it in a sorted container.
+    std::lock_guard<std::mutex> lock(m_listenersMutex);
     Listener listener = std::make_shared<Callable>(a_callable);
     m_listeners.emplace(std::make_pair(a_sortIndex, listener));
 
     return listener;
+}
+
+//--------------------------------------------------------------
+//! Remove a listener so not invoked when events are dispatched.
+//!
+//! \param[in] a_listener Listener object to stop being invoked.
+//! \return True if the listener was removed or false otherwise.
+//--------------------------------------------------------------
+template<class... Args> inline
+bool Dispatcher<Args...>::Remove(const Listener& a_listener)
+{
+    // Find and remove the listener from the container.
+    std::lock_guard<std::mutex> lock(m_listenersMutex);
+    const auto& listenersBegin = m_listeners.begin();
+    const auto& listenersEnd = m_listeners.end();
+    for (auto it = listenersBegin; it != listenersEnd; ++it)
+    {
+        if (it->second.lock() == a_listener)
+        {
+            m_listeners.erase(it);
+            return true;
+        }
+    }
+    return false;
 }
 
 //--------------------------------------------------------------
@@ -97,8 +122,8 @@ Dispatcher<Args...>::Register(Callable a_callable,
 //!
 //! \param[in] a_args Arguments forwarded to each event listener.
 //--------------------------------------------------------------
-template<class... Args>
-inline void Dispatcher<Args...>::Dispatch(Args... a_args)
+template<class... Args> inline
+void Dispatcher<Args...>::Dispatch(Args... a_args)
 {
     // Gather non-expired listeners.
     std::vector<Listener> listeners;
@@ -146,9 +171,9 @@ inline void Dispatcher<Args...>::Dispatch(Args... a_args)
 //! \param[in] a_function Function to filter all incoming events.
 //! \param[in] a_callable Callable to be invoked unless filtered.
 //--------------------------------------------------------------
-template<class... Args>
-inline Dispatcher<Args...>::Filter::Filter(Function a_function,
-                                           Callable a_callable)
+template<class... Args> inline
+Dispatcher<Args...>::Filter::Filter(const Function& a_function,
+                                    const Callable& a_callable)
     : m_function(a_function)
     , m_callable(a_callable)
 {
@@ -160,8 +185,8 @@ inline Dispatcher<Args...>::Filter::Filter(Function a_function,
 //!
 //! \param[in] a_args Arguments forwarded to filter and callable.
 //--------------------------------------------------------------
-template<class... Args>
-inline Status Dispatcher<Args...>::Filter::operator()(Args... a_args) const
+template<class... Args> inline
+Status Dispatcher<Args...>::Filter::operator()(Args... a_args) const
 {
     return (m_callable && m_function && m_function(a_args...)) ?
             m_callable(a_args...) : Status::Filtered;
