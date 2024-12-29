@@ -83,7 +83,7 @@ typename Dispatcher<Args...>::Listener
 Dispatcher<Args...>::Register(const Callable& a_callable,
                               const int32_t& a_sortIndex)
 {
-    // Create the listener then store it in a sorted container.
+    // Create the listener and add it to the container.
     std::lock_guard<std::mutex> lock(m_listenersMutex);
     Listener listener = std::make_shared<Callable>(a_callable);
     m_listeners.emplace(std::make_pair(a_sortIndex, listener));
